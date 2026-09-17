@@ -16,18 +16,45 @@ export class StorageService {
   private readonly basePath: string;
 
   constructor(private readonly config: ConfigService) {
-    this.basePath = path.resolve(this.config.get<string>('STORAGE_LOCAL_PATH', './storage'));
+    const configured = this.config.get<string>('STORAGE_LOCAL_PATH');
+    if (configured && path.isAbsolute(configured)) {
+      this.basePath = configured;
+    } else {
+      // Default to shared backend storage directory
+      this.basePath = path.resolve(__dirname, '../../../../storage');
+    }
   }
 
   async save(buffer: Buffer, extension: string): Promise<string> {
     await fs.mkdir(this.basePath, { recursive: true });
     const key = `${uuid()}${extension}`;
     await fs.writeFile(path.join(this.basePath, key), buffer);
+    // Also mirror to legacy ./storage for backward compatibility
+    try {
+      const legacyPath = path.resolve(process.cwd(), './storage');
+      await fs.mkdir(legacyPath, { recursive: true });
+      await fs.writeFile(path.join(legacyPath, key), buffer);
+    } catch {
+      // ignore mirror failure
+    }
     return key;
   }
 
   async read(storageKey: string): Promise<Buffer> {
     const safeKey = path.basename(storageKey); // defense in depth, ignores any path segments
+    const candidatePaths = [
+      path.join(this.basePath, safeKey),
+      path.resolve(process.cwd(), './storage', safeKey),
+      path.resolve(process.cwd(), '../../storage', safeKey),
+    ];
+
+    for (const candidate of candidatePaths) {
+      try {
+        return await fs.readFile(candidate);
+      } catch {
+        // try next
+      }
+    }
     return fs.readFile(path.join(this.basePath, safeKey));
   }
 }

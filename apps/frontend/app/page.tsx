@@ -1353,7 +1353,23 @@ function PracticeView() {
 
     setIsSubmitting(true)
     try {
-      const sub = await apiClient.submitCode(questionId || 'two-sum', language, code)
+      let activeQuestionId = questionId
+      if (!activeQuestionId) {
+        try {
+          const session = await apiClient.startInterviewSession('TECHNICAL')
+          const q = await apiClient.nextInterviewQuestion(session.id, 'Two Sum', 'CODING')
+          activeQuestionId = q.id
+          setQuestionId(q.id)
+        } catch {
+          // fallback
+        }
+      }
+
+      if (!activeQuestionId) {
+        throw new Error('Please wait a moment for the practice question to load or restart the session.')
+      }
+
+      const sub = await apiClient.submitCode(activeQuestionId, language, code)
       const result = await apiClient.pollSubmissionResult(sub.id)
       setSubmission(result)
     } catch (err) {

@@ -35,7 +35,29 @@ export class ResumeProcessor extends WorkerHost {
   }
 
   private async extractText(storageKey: string, mimeType: string): Promise<string> {
-    const buffer = await fs.readFile(path.join(STORAGE_PATH, storageKey));
+    const candidatePaths = [
+      path.resolve(__dirname, '../../../../storage', storageKey),
+      path.join(STORAGE_PATH, storageKey),
+      path.resolve(process.cwd(), '../api/storage', storageKey),
+      path.resolve(process.cwd(), '../../apps/api/storage', storageKey),
+      path.resolve(process.cwd(), '../../storage', storageKey),
+      path.resolve(process.cwd(), './storage', storageKey),
+    ];
+
+    let buffer: Buffer | null = null;
+    for (const candidate of candidatePaths) {
+      try {
+        buffer = await fs.readFile(candidate);
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+
+    if (!buffer) {
+      throw new Error(`File ${storageKey} not found in storage (checked ${candidatePaths[0]}).`);
+    }
+
     if (mimeType.includes('pdf')) {
       const result = await pdfParse(buffer);
       return result.text;
