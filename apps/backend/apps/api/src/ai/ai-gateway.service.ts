@@ -74,7 +74,7 @@ export class AiGatewayService {
 
   async call<T>(options: AiCallOptions): Promise<T> {
     const prompt = PROMPTS[options.promptKey];
-    const schema = prompt.schema as z.ZodType<T>;
+    const schema = (prompt.schema as unknown) as z.ZodType<T>;
     const cacheKey = this.cacheKey(options.promptKey, options.variables);
 
     if (options.cacheable) {

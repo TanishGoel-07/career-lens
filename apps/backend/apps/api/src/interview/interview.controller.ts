@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsIn, IsString } from 'class-validator';
 import { InterviewService } from './interview.service';
@@ -25,18 +25,28 @@ class VerbalAnswerDto {
 export class InterviewController {
   constructor(private readonly interviewService: InterviewService) {}
 
+  @Get('sessions')
+  list(@CurrentUser() user: AuthenticatedUser): Promise<any> {
+    return this.interviewService.listSessions(user.id);
+  }
+
+  @Get('sessions/:id')
+  get(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<any> {
+    return this.interviewService.getSession(user.id, id);
+  }
+
   @Post('sessions')
-  start(@CurrentUser() user: AuthenticatedUser, @Body() dto: StartSessionDto) {
+  start(@CurrentUser() user: AuthenticatedUser, @Body() dto: StartSessionDto): Promise<any> {
     return this.interviewService.startSession(user.id, dto.type as any);
   }
 
   @Post('sessions/:id/next-question')
-  next(@CurrentUser() user: AuthenticatedUser, @Param('id') sessionId: string, @Body() dto: NextQuestionDto) {
+  next(@CurrentUser() user: AuthenticatedUser, @Param('id') sessionId: string, @Body() dto: NextQuestionDto): Promise<any> {
     return this.interviewService.nextQuestion(user.id, sessionId, dto.topic, dto.questionType as any);
   }
 
   @Post('questions/:id/answer')
-  answer(@CurrentUser() user: AuthenticatedUser, @Param('id') questionId: string, @Body() dto: VerbalAnswerDto) {
+  answer(@CurrentUser() user: AuthenticatedUser, @Param('id') questionId: string, @Body() dto: VerbalAnswerDto): Promise<any> {
     return this.interviewService.submitVerbalAnswer(user.id, questionId, dto.rawAnswer);
   }
 }

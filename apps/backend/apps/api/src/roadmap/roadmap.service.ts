@@ -17,7 +17,7 @@ export class RoadmapService {
     private readonly graph: SkillGraphService,
   ) {}
 
-  async generate(userId: string, targetRoleId: string, hoursPerWeek: number) {
+  async generate(userId: string, targetRoleId: string, hoursPerWeek: number): Promise<any> {
     const targetRole = await this.prisma.targetRole.findUnique({ where: { id: targetRoleId } });
     if (!targetRole || targetRole.userId !== userId) {
       throw new NotFoundException('Target role not found.');
@@ -115,7 +115,7 @@ export class RoadmapService {
     });
   }
 
-  async updateModuleStatus(userId: string, moduleId: string, status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED') {
+  async updateModuleStatus(userId: string, moduleId: string, status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'): Promise<any> {
     const mod = await this.prisma.roadmapModule.findUnique({
       where: { id: moduleId },
       include: { roadmap: true },

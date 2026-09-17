@@ -17,7 +17,7 @@ export class CodeExecutionService {
     @InjectQueue('code-execution') private readonly queue: Queue,
   ) {}
 
-  async submit(userId: string, interviewQuestionId: string, language: CodeLanguage, sourceCode: string) {
+  async submit(userId: string, interviewQuestionId: string, language: CodeLanguage, sourceCode: string): Promise<any> {
     if (Buffer.byteLength(sourceCode, 'utf8') > MAX_SOURCE_BYTES) {
       throw new BadRequestException('Submission exceeds the maximum allowed size.');
     }
@@ -50,7 +50,7 @@ export class CodeExecutionService {
     return submission;
   }
 
-  async getResult(userId: string, submissionId: string) {
+  async getResult(userId: string, submissionId: string): Promise<any> {
     const submission = await this.prisma.codeSubmission.findUnique({ where: { id: submissionId } });
     if (!submission || submission.userId !== userId) throw new NotFoundException('Submission not found.');
     return submission;

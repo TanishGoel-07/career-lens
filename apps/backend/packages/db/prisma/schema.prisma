@@ -2,7 +2,8 @@
 // See docs/architecture.md for design rationale on every model below.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {

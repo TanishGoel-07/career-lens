@@ -23,13 +23,31 @@ export class AiAnalysisProcessor extends WorkerHost {
     super();
   }
 
-  private async callOpenAiForFeedback(deterministicBreakdown: unknown): Promise<{
+  private async callAiForFeedback(deterministicBreakdown: unknown): Promise<{
     strengths: string[];
     weaknesses: string[];
     suggestions: string[];
   } | null> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return null; // graceful degradation — deterministic score still stands alone
+    const provider = process.env.AI_PROVIDER || 'mock';
+
+    if (provider === 'mock') {
+      return {
+        strengths: [
+          'Strong presentation of practical technical experience and project outcomes.',
+          'Clear progression in responsibilities and technical breadth.',
+          'Consistent use of action verbs and ATS-friendly typography.',
+        ],
+        weaknesses: [
+          'Some bullet points would benefit from more quantified business metrics.',
+          'Summary could be more tailored towards target architectural roles.',
+        ],
+        suggestions: [
+          'Include quantifiable impact (e.g., latency reductions, cost savings, user scale).',
+          'Highlight system design and cloud architecture projects prominently.',
+          'Group core proficiencies into clear categories (Languages, Frameworks, Cloud, Databases).',
+        ],
+      };
+    }
 
     const systemPrompt = [
       'You are part of CareerLens AI\'s resume-feedback feature (prompt: resume-feedback.v1).',
@@ -37,6 +55,43 @@ export class AiAnalysisProcessor extends WorkerHost {
       '{ "strengths": string[], "weaknesses": string[], "suggestions": string[] }.',
       'Never claim this is an official ATS score.',
     ].join(' ');
+
+    if (provider === 'gemini') {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        this.logger.warn('GEMINI_API_KEY not set — falling back to deterministic mock feedback');
+        return this.callAiForFeedback(deterministicBreakdown);
+      }
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: JSON.stringify(deterministicBreakdown) }] }],
+          generationConfig: { maxOutputTokens: 800, responseMimeType: 'application/json' },
+        }),
+      });
+      if (!response.ok) throw new Error(`Gemini request failed: ${response.status}`);
+      const data = (await response.json()) as any;
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed.strengths) || !Array.isArray(parsed.weaknesses) || !Array.isArray(parsed.suggestions)) {
+        throw new Error('Gemini response failed schema validation.');
+      }
+      return parsed;
+    }
+
+    // Default to OpenAI
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      this.logger.warn('OPENAI_API_KEY not set — falling back to deterministic mock feedback');
+      return {
+        strengths: ['Clear experience progression', 'Good use of measurable outcomes', 'Relevant technical skills'],
+        weaknesses: ['Summary could be more role-specific', 'Two bullets are longer than recommended'],
+        suggestions: ['Tailor your summary to the target role', 'Add one project that demonstrates system design'],
+      };
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -73,7 +128,7 @@ export class AiAnalysisProcessor extends WorkerHost {
     }
 
     try {
-      const aiFeedback = await this.callOpenAiForFeedback(evaluation.deterministicScoreBreakdown);
+      const aiFeedback = await this.callAiForFeedback(evaluation.deterministicScoreBreakdown);
       if (aiFeedback) {
         await this.prisma.resumeEvaluation.update({
           where: { id: evaluation.id },

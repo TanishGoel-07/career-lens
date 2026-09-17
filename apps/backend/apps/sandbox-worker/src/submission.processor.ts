@@ -63,7 +63,7 @@ export class SubmissionProcessor extends WorkerHost {
             compileError: result.compileError ?? null,
             passedCount: result.testResults.filter((t) => t.passed).length,
             totalCount: result.testResults.length,
-          },
+          } as any,
           completedAt: new Date(),
         },
       });

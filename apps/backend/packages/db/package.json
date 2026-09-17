@@ -1,14 +1,18 @@
 {
   "name": "@career-lens/db",
   "version": "0.1.0",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
+    "build": "tsc",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.15.0"
+    "@prisma/client": "^5.15.0",
+    "@nestjs/common": "^10.3.0",
+    "argon2": "^0.31.2"
   },
   "devDependencies": {
     "prisma": "^5.15.0",

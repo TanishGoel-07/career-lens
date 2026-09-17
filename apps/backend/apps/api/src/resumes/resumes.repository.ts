@@ -38,7 +38,7 @@ export class ResumesRepository {
   ) {
     return this.prisma.resume.update({
       where: { id },
-      data: { ...data, status: ResumeStatus.COMPLETED },
+      data: { ...(data as any), status: ResumeStatus.COMPLETED },
     });
   }
 

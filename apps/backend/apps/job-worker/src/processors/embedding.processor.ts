@@ -70,11 +70,11 @@ export class EmbeddingProcessor extends WorkerHost {
       return;
     }
 
-    // Idempotency: clear any existing chunks for this owner before
-    // re-inserting, so a redelivered/re-run job doesn't duplicate rows.
-    await this.prisma.documentChunk.deleteMany(
-      resumeId ? { where: { resumeId } } : { where: { jobId } },
-    );
+    if (resumeId) {
+      await this.prisma.documentChunk.deleteMany({ where: { resumeId } });
+    } else if (jobId) {
+      await this.prisma.documentChunk.deleteMany({ where: { jobId } });
+    }
 
     const chunks = chunkText(text);
     for (const [i, content] of chunks.entries()) {

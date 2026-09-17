@@ -13,9 +13,21 @@ async function bootstrap() {
   // called out in the architecture doc's §22 security review.
   app.use(helmet());
 
-  // CORS is explicitly configured, not left at a permissive default.
+  // CORS is explicitly configured for frontend origins
+  const defaultOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:3002',
+  ];
+  const configuredOrigins = process.env.FRONTEND_ORIGIN
+    ? process.env.FRONTEND_ORIGIN.split(',').map((o) => o.trim())
+    : defaultOrigins;
+
   app.enableCors({
-    origin: process.env.FRONTEND_ORIGIN?.split(',') ?? ['http://localhost:3000'],
+    origin: configuredOrigins,
     credentials: true,
   });
 
@@ -39,7 +51,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = process.env.PORT ?? 3000;
+  const port = process.env.PORT ?? 3001;
   await app.listen(port);
   // eslint-disable-next-line no-console
   console.log(`CareerLens API listening on :${port}`);
