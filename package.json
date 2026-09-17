@@ -1,0 +1,22 @@
+{
+  "name": "careerlens-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "pnpm --filter @career-lens/api start:dev",
+    "dev:job-worker": "pnpm --filter @career-lens/job-worker start:dev",
+    "dev:sandbox-worker": "pnpm --filter @career-lens/sandbox-worker start:dev",
+    "dev:frontend": "pnpm --filter @careerlens/frontend dev",
+    "build:backend": "pnpm --filter @career-lens/api build && pnpm --filter @career-lens/job-worker build && pnpm --filter @career-lens/sandbox-worker build",
+    "build:frontend": "pnpm --filter @careerlens/frontend build",
+    "build": "pnpm build:backend && pnpm build:frontend",
+    "test:backend": "pnpm --filter @career-lens/api test",
+    "test": "pnpm test:backend",
+    "db:generate": "pnpm --filter @career-lens/db exec prisma generate",
+    "db:migrate": "pnpm --filter @career-lens/db exec prisma migrate dev",
+    "db:push": "pnpm --filter @career-lens/db exec prisma db push",
+    "db:seed": "pnpm --filter @career-lens/db exec ts-node prisma/seed.ts",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  }
+}
