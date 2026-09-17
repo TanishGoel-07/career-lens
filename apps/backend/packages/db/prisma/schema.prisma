@@ -1,0 +1,439 @@
+// CareerLens AI — Prisma schema
+// See docs/architecture.md for design rationale on every model below.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ResumeStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum SavedJobStatus {
+  SAVED
+  APPLIED
+  INTERVIEWING
+  REJECTED
+  OFFER
+}
+
+enum SkillSource {
+  RESUME
+  SELF_REPORTED
+  ASSESSED
+}
+
+enum SkillImportance {
+  REQUIRED
+  OPTIONAL
+}
+
+enum RoadmapStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum RoadmapModuleType {
+  MODULE
+  PRACTICE
+  PROJECT
+  ASSESSMENT
+}
+
+enum InterviewType {
+  TECHNICAL
+  HR
+  BEHAVIORAL
+  SYSTEM_DESIGN
+}
+
+enum QuestionType {
+  CODING
+  VERBAL
+}
+
+enum CodeSubmissionStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  TIMEOUT
+}
+
+enum CodeLanguage {
+  PYTHON
+  CPP
+  JAVA
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  role              Role      @default(USER)
+  tokenVersion      Int       @default(0)
+  emailVerifiedAt   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  profile           Profile?
+  resumes           Resume[]
+  refreshTokens     RefreshToken[]
+  savedJobs         SavedJob[]
+  jobMatches        JobMatch[]
+  userSkills        UserSkill[]
+  targetRoles       TargetRole[]
+  skillGaps         SkillGap[]
+  roadmaps          Roadmap[]
+  interviewSessions InterviewSession[]
+  codeSubmissions   CodeSubmission[]
+  aiInteractions    AiInteractionLog[]
+  auditLogsActed    AuditLog[]          @relation("AuditActor")
+
+  @@index([email])
+}
+
+model Profile {
+  id                        String   @id @default(uuid())
+  userId                    String   @unique
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName                  String?
+  headline                  String?
+  experienceYears           Int?
+  learningPaceHoursPerWeek  Int?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+model RefreshToken {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String    @unique
+  familyId          String
+  replacedByTokenId String?
+  createdByIp       String?
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model Resume {
+  id               String       @id @default(uuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalFilename String
+  storageKey       String       @unique
+  mimeType         String
+  sizeBytes        Int
+  status           ResumeStatus @default(QUEUED)
+  failureReason    String?
+  parsedText       String?
+  sections         Json?
+  extractedSkills  Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+
+  evaluations      ResumeEvaluation[]
+  jobMatches       JobMatch[]
+  chunks           DocumentChunk[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ResumeEvaluation {
+  id                          String   @id @default(uuid())
+  resumeId                    String
+  resume                      Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  deterministicScoreBreakdown Json
+  aiFeedback                  Json?
+  overallScore                Int
+  createdAt                   DateTime @default(now())
+
+  @@index([resumeId])
+}
+
+model Job {
+  id             String    @id @default(uuid())
+  source         String
+  externalId     String
+  title          String
+  company        String
+  description    String
+  requiredSkills Json
+  optionalSkills Json
+  location       String?
+  seniority      String?
+  postedAt       DateTime?
+  createdAt      DateTime  @default(now())
+
+  savedBy        SavedJob[]
+  matches        JobMatch[]
+  chunks         DocumentChunk[]
+
+  @@unique([source, externalId])
+  @@index([title])
+}
+
+model SavedJob {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status    SavedJobStatus @default(SAVED)
+  notes     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([userId, jobId])
+}
+
+model JobMatch {
+  id                 String   @id @default(uuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId              String
+  job                Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resumeId           String
+  resume             Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  overallScore       Float
+  matchingSkills     Json
+  missingRequired    Json
+  missingOptional    Json
+  experienceMismatch Json
+  explanation        String?
+  scoringVersion     String
+  createdAt          DateTime @default(now())
+
+  @@unique([userId, jobId, resumeId])
+  @@index([userId])
+}
+
+model Skill {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  category String?
+
+  userSkills      UserSkill[]
+  roleSkills      RoleSkill[]
+  dependants      SkillDependency[] @relation("DependantSkill")
+  prerequisiteFor SkillDependency[] @relation("PrerequisiteSkill")
+  skillGaps       SkillGap[]
+}
+
+model UserSkill {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillId     String
+  skill       Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  proficiency Int         @default(1)
+  source      SkillSource
+  createdAt   DateTime    @default(now())
+
+  @@unique([userId, skillId])
+}
+
+model TargetRole {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime @default(now())
+
+  roleSkills RoleSkill[]
+  skillGaps  SkillGap[]
+  roadmaps   Roadmap[]
+}
+
+model RoleSkill {
+  id             String          @id @default(uuid())
+  roleId         String
+  role           TargetRole      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  skillId        String
+  skill          Skill           @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  importance     SkillImportance
+  minProficiency Int             @default(1)
+
+  @@unique([roleId, skillId])
+}
+
+model SkillDependency {
+  skillId             String
+  skill               Skill @relation("DependantSkill", fields: [skillId], references: [id], onDelete: Cascade)
+  prerequisiteSkillId String
+  prerequisite        Skill @relation("PrerequisiteSkill", fields: [prerequisiteSkillId], references: [id], onDelete: Cascade)
+
+  @@id([skillId, prerequisiteSkillId])
+}
+
+model SkillGap {
+  id               String     @id @default(uuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetRoleId     String
+  targetRole       TargetRole @relation(fields: [targetRoleId], references: [id], onDelete: Cascade)
+  skillId          String
+  skill            Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  priority         Int
+  difficulty       Int
+  prerequisitesMet Boolean
+  computedAt       DateTime   @default(now())
+
+  @@unique([userId, targetRoleId, skillId])
+  @@index([userId, targetRoleId])
+}
+
+model Roadmap {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetRoleId  String
+  targetRole    TargetRole    @relation(fields: [targetRoleId], references: [id], onDelete: Cascade)
+  status        RoadmapStatus @default(NOT_STARTED)
+  generatedFrom Json
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  modules RoadmapModule[]
+}
+
+model RoadmapModule {
+  id          String            @id @default(uuid())
+  roadmapId   String
+  roadmap     Roadmap           @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  skillGapId  String?
+  title       String
+  type        RoadmapModuleType
+  orderIndex  Int
+  status      RoadmapStatus     @default(NOT_STARTED)
+  resources   Json?
+  completedAt DateTime?
+
+  @@index([roadmapId])
+}
+
+model InterviewSession {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        InterviewType
+  status      String           @default("IN_PROGRESS")
+  startedAt   DateTime         @default(now())
+  completedAt DateTime?
+
+  questions InterviewQuestion[]
+}
+
+model InterviewQuestion {
+  id               String           @id @default(uuid())
+  sessionId        String
+  session          InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  topic            String
+  difficulty       String
+  expectedConcepts Json
+  promptText       String
+  questionType     QuestionType
+  testCases        Json?
+
+  answers         InterviewAnswer[]
+  codeSubmissions CodeSubmission[]
+}
+
+model InterviewAnswer {
+  id                  String            @id @default(uuid())
+  questionId          String
+  question            InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  rawAnswer           String
+  deterministicResult Json?
+  aiEvaluation        Json?
+  score               Float?
+  createdAt           DateTime          @default(now())
+}
+
+model CodeSubmission {
+  id                  String               @id @default(uuid())
+  interviewQuestionId String
+  interviewQuestion   InterviewQuestion    @relation(fields: [interviewQuestionId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  language            CodeLanguage
+  sourceCode          String
+  status              CodeSubmissionStatus @default(QUEUED)
+  testResults         Json?
+  submittedAt         DateTime             @default(now())
+  completedAt         DateTime?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model DocumentChunk {
+  id        String   @id @default(uuid())
+  ownerType String
+  resumeId  String?
+  resume    Resume?  @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  jobId     String?
+  job       Job?     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  content   String
+  embedding Unsupported("vector(1536)")?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([ownerType])
+}
+
+model AiInteractionLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  feature       String
+  promptVersion String
+  provider      String
+  model         String
+  inputTokens   Int
+  outputTokens  Int
+  costUsd       Decimal  @db.Decimal(10, 6)
+  latencyMs     Int
+  cacheHit      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([feature])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String
+  actor       User     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  action      String
+  targetType  String
+  targetId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([targetType, targetId])
+}
