@@ -1,0 +1,114 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install root & workspace dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Generate Prisma client
+        working-directory: apps/backend
+        run: pnpm db:generate
+
+      - name: Validate Backend TypeScript
+        working-directory: apps/backend
+        run: pnpm -r --filter "./apps/*" run build
+
+      - name: Validate Frontend Build
+        working-directory: apps/frontend
+        run: pnpm build
+
+  test-backend:
+    name: Backend Unit & E2E Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: careerlens
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Setup Environment
+        run: |
+          cp apps/backend/.env.example apps/backend/.env
+          cp apps/backend/.env.example apps/backend/apps/api/.env
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/careerlens" >> apps/backend/.env
+          echo "REDIS_URL=redis://localhost:6380" >> apps/backend/.env
+          echo "AI_PROVIDER=mock" >> apps/backend/.env
+          echo "MOCK_EMBEDDINGS=true" >> apps/backend/.env
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/careerlens" >> apps/backend/apps/api/.env
+          echo "REDIS_URL=redis://localhost:6380" >> apps/backend/apps/api/.env
+          echo "AI_PROVIDER=mock" >> apps/backend/apps/api/.env
+          echo "MOCK_EMBEDDINGS=true" >> apps/backend/apps/api/.env
+
+      - name: Push Database Schema & Seed
+        working-directory: apps/backend
+        run: |
+          pnpm db:push
+          pnpm db:seed
+
+      - name: Run Backend Unit Tests
+        working-directory: apps/backend/apps/api
+        run: pnpm test
+
+      - name: Run Backend E2E Journey Tests
+        working-directory: apps/backend/apps/api
+        run: pnpm run test:e2e
