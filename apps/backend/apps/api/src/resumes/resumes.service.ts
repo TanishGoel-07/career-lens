@@ -70,7 +70,7 @@ export class ResumesService {
         backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: 100,
         removeOnFail: false, // failed jobs stay visible for the admin dead-letter view
-        jobId: `parse-resume:${resume.id}`, // idempotency: re-enqueue is a no-op for BullMQ
+        jobId: `parse-resume_${resume.id}`, // idempotency: re-enqueue is a no-op for BullMQ
       },
     );
 

@@ -66,7 +66,7 @@ export class JobIngestionProcessor extends WorkerHost {
       await this.embeddingQueue.add(
         'embed-job',
         { jobId: saved.id },
-        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, jobId: `embed-job:${saved.id}` },
+        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, jobId: `embed-job_${saved.id}` },
       );
     }
     this.logger.log(`Ingested ${job.data.postings.length} job postings.`);

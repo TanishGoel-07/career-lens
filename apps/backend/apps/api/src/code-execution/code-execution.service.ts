@@ -43,7 +43,7 @@ export class CodeExecutionService {
         // human/product decision is required before enabling job retries here.
         removeOnComplete: 200,
         removeOnFail: false,
-        jobId: `run-submission:${submission.id}`,
+        jobId: `run-submission_${submission.id}`,
       },
     );
 

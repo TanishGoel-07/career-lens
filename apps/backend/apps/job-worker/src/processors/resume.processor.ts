@@ -111,12 +111,12 @@ export class ResumeProcessor extends WorkerHost {
       await this.aiAnalysisQueue.add(
         'analyze-resume',
         { resumeId },
-        { attempts: 2, backoff: { type: 'exponential', delay: 5000 }, jobId: `analyze-resume:${resumeId}` },
+        { attempts: 2, backoff: { type: 'exponential', delay: 5000 }, jobId: `analyze-resume_${resumeId}` },
       );
       await this.embeddingQueue.add(
         'embed-resume',
         { resumeId },
-        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, jobId: `embed-resume:${resumeId}` },
+        { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, jobId: `embed-resume_${resumeId}` },
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown parsing error';
