@@ -38,7 +38,8 @@ export class RoadmapController {
   listMine(@CurrentUser() user: AuthenticatedUser) {
     return this.prisma.roadmap.findMany({
       where: { userId: user.id },
-      include: { modules: { orderBy: { orderIndex: 'asc' } } },
+      include: { targetRole: true, modules: { orderBy: { orderIndex: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
     });
   }
 

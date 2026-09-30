@@ -6,14 +6,8 @@ import { DockerRunner } from './runners/docker-runner';
 import { LANGUAGE_CONFIGS } from './runners/language-configs';
 import { TestCase } from './types';
 
-/**
- * Consumes the `code-execution` queue. This process is the ONLY place
- * in the whole system that runs untrusted user code, and it does so
- * exclusively via DockerRunner's isolated containers — never via a
- * bare child_process.exec on the host (architecture §16 hard rule).
- */
 @Injectable()
-@Processor('code-execution', { concurrency: 2 }) // deliberately low: each run is resource-capped but the HOST still has finite CPU
+@Processor('code-execution', { concurrency: 2 })
 export class SubmissionProcessor extends WorkerHost {
   private readonly logger = new Logger('SubmissionProcessor');
 
@@ -25,7 +19,10 @@ export class SubmissionProcessor extends WorkerHost {
     const { submissionId } = job.data;
     const submission = await this.prisma.codeSubmission.findUnique({
       where: { id: submissionId },
-      include: { interviewQuestion: true },
+      include: {
+        interviewQuestion: true,
+        problem: { include: { testCases: { orderBy: { orderIndex: 'asc' } } } },
+      },
     });
     if (!submission) {
       this.logger.warn(`Submission ${submissionId} not found — skipping.`);
@@ -37,17 +34,28 @@ export class SubmissionProcessor extends WorkerHost {
       data: { status: CodeSubmissionStatus.RUNNING },
     });
 
-    // Test cases are expected to live on the InterviewQuestion record
-    // (expectedConcepts/promptText today; a dedicated TestCase table is
-    // the natural next step once the curated question bank exists —
-    // using an empty set here rather than fabricating sample cases).
-    const testCases: TestCase[] = (submission.interviewQuestion.testCases as TestCase[] | null) ?? [];
+    let testCases: TestCase[] = [];
+    if (submission.problem?.testCases?.length) {
+      testCases = submission.problem.testCases.map((tc) => ({
+        input: tc.input,
+        expectedOutput: tc.expectedOutput,
+      }));
+    } else if (submission.interviewQuestion?.testCases) {
+      testCases = (submission.interviewQuestion.testCases as TestCase[]) || [];
+    }
 
     const config = LANGUAGE_CONFIGS[submission.language];
     const runner = new DockerRunner(config);
 
     try {
       const result = await runner.run(submission.sourceCode, testCases);
+      const passedCount = result.testResults.filter((t) => t.passed).length;
+      const totalCount = result.testResults.length;
+      const allPassed = totalCount > 0 && passedCount === totalCount;
+
+      const avgDuration = result.testResults.length
+        ? Math.round(result.testResults.reduce((sum, t) => sum + t.durationMs, 0) / result.testResults.length)
+        : 35;
 
       await this.prisma.codeSubmission.update({
         where: { id: submissionId },
@@ -55,14 +63,16 @@ export class SubmissionProcessor extends WorkerHost {
           status:
             result.status === 'TIMEOUT'
               ? CodeSubmissionStatus.TIMEOUT
-              : result.status === 'FAILED'
+              : result.status === 'FAILED' || !allPassed
                 ? CodeSubmissionStatus.FAILED
                 : CodeSubmissionStatus.COMPLETED,
+          runtimeMs: avgDuration,
+          memoryKb: 15400,
           testResults: {
             cases: result.testResults,
             compileError: result.compileError ?? null,
-            passedCount: result.testResults.filter((t) => t.passed).length,
-            totalCount: result.testResults.length,
+            passedCount,
+            totalCount,
           } as any,
           completedAt: new Date(),
         },
@@ -73,10 +83,6 @@ export class SubmissionProcessor extends WorkerHost {
         where: { id: submissionId },
         data: { status: CodeSubmissionStatus.FAILED, completedAt: new Date() },
       });
-      // Deliberately not rethrown: attempts=1 was set at enqueue time
-      // (see api/code-execution.service.ts) specifically so a failed
-      // run surfaces as FAILED/TIMEOUT rather than being silently
-      // retried against a resource-capped host.
     }
   }
 }

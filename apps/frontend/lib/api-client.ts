@@ -50,7 +50,26 @@ export interface ResumeEvaluation {
   id: string;
   resumeId: string;
   overallScore: number;
-  deterministicScoreBreakdown: {
+  technicalDepthScore?: number | null;
+  formattingScore?: number | null;
+  readabilityScore?: number | null;
+  keywordScore?: number | null;
+  impactScore?: number | null;
+  weakBullets?: Array<{
+    bullet: string;
+    reason: string;
+    suggestion: string;
+    formulaApplied: string;
+  }> | null;
+  lineFeedback?: Array<{
+    lineNumber: number;
+    issue: string;
+    fix: string;
+  }> | null;
+  missingSkills?: string[] | null;
+  missingKeywords?: string[] | null;
+  rewrittenResume?: string | null;
+  deterministicScoreBreakdown?: {
     sectionsScore: number;
     keywordScore: number;
     formattingScore: number;
@@ -242,6 +261,158 @@ export interface InterviewSession {
   startedAt: string;
   completedAt: string | null;
   questions?: InterviewQuestion[];
+}
+
+export interface CodingProblem {
+  id: string;
+  slug: string;
+  title: string;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  category: string;
+  description: string;
+  starterCode: {
+    python?: string;
+    cpp?: string;
+    java?: string;
+  };
+  testCases?: Array<{
+    input: string;
+    expectedOutput: string;
+    isHidden: boolean;
+  }>;
+}
+
+export interface ProblemHintResponse {
+  hint: string;
+  hintIndex: number;
+  totalHints: number;
+}
+
+export interface ProblemDebugResponse {
+  bugAnalysis: string;
+  suggestedFix: string;
+  conceptReminder: string;
+}
+
+export interface ProblemReviewResponse {
+  timeComplexity: string;
+  spaceComplexity: string;
+  codeQualityScore: number;
+  strengths: string[];
+  refactoringSuggestions: string[];
+}
+
+export interface GitHubRepo {
+  id: string;
+  name: string;
+  description: string | null;
+  language: string | null;
+  stars: number;
+  forks: number;
+  url: string;
+  techStack: string[];
+  qualityScore: number;
+}
+
+export interface GitHubProfile {
+  id: string;
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  profileScore: number;
+  portfolioScore: number;
+  totalRepos: number;
+  totalStars: number;
+  topLanguages: Array<{ language: string; percentage: number }>;
+  lastSyncedAt: string;
+  repos: GitHubRepo[];
+}
+
+export interface UserAnalyticsSummary {
+  atsScoreTrends: Array<{ date: string; score: number; filename: string }>;
+  currentAtsScore: number;
+  skillProgression: {
+    totalSkillsAcquired: number;
+    targetRoleSkillsTotal: number;
+    coveragePercentage: number;
+  };
+  roadmapVelocity: {
+    totalModules: number;
+    completedModules: number;
+    completionPercentage: number;
+  };
+  codingPerformance: {
+    totalSolved: number;
+    easySolved: number;
+    mediumSolved: number;
+    hardSolved: number;
+    submissionsCount: number;
+  };
+  interviewPerformance: {
+    sessionsCompleted: number;
+    averageScore: number;
+  };
+  githubIntelligence: {
+    profileScore: number;
+    portfolioScore: number;
+    verifiedSkillsCount: number;
+  } | null;
+  dynamicNextBestAction: {
+    title: string;
+    description: string;
+    targetView: 'resume' | 'practice' | 'skills' | 'roadmap' | 'assistant';
+  };
+}
+
+export interface AdminAnalyticsSummary {
+  totalUsers: number;
+  totalResumes: number;
+  averageAtsScore: number;
+  totalCodeSubmissions: number;
+  codePassRatePercentage: number;
+  totalInterviewSessions: number;
+  topDemandedSkills: Array<{ skill: string; jobCount: number }>;
+  topTargetRoles: Array<{ role: string; count: number }>;
+  aiUsageSummary: {
+    totalCalls: number;
+    totalCostUsd: number;
+    totalTokens: number;
+    avgLatencyMs: number;
+  };
+}
+
+export interface CoachMessage {
+  id: string;
+  sessionId: string;
+  sender: 'USER' | 'COACH';
+  text: string;
+  structuredPayload?: any;
+  createdAt: string;
+}
+
+export interface CoachSession {
+  id: string;
+  userId: string;
+  title: string;
+  goalRole: string | null;
+  status: string;
+  createdAt: string;
+  messages?: CoachMessage[];
+}
+
+export interface GoalAssessment {
+  readinessScore: number;
+  gapAnalysis: {
+    missingSkills: string[];
+    experienceGapYears: number;
+    dsaReadinessScore: number;
+  };
+  weeklyActionPlan: Array<{
+    week: number;
+    focus: string;
+    deliverable: string;
+  }>;
+  aiRationale: string;
 }
 
 class ApiClient {
@@ -646,6 +817,113 @@ class ApiClient {
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
     return this.getCodeSubmission(submissionId);
+  }
+
+  // --- Coding Practice Platform ---------------------------------------------
+  async listProblems(): Promise<CodingProblem[]> {
+    return this.request('/practice/problems');
+  }
+
+  async getProblem(id: string): Promise<CodingProblem> {
+    return this.request(`/practice/problems/${id}`);
+  }
+
+  async submitProblem(
+    id: string,
+    language: 'PYTHON' | 'CPP' | 'JAVA',
+    sourceCode: string,
+  ): Promise<CodeSubmission> {
+    return this.request(`/practice/problems/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ language, sourceCode }),
+    });
+  }
+
+  async getProblemHint(
+    id: string,
+    currentCode: string,
+    hintIndex = 1,
+  ): Promise<ProblemHintResponse> {
+    return this.request(`/practice/problems/${id}/hint`, {
+      method: 'POST',
+      body: JSON.stringify({ currentCode, hintIndex }),
+    });
+  }
+
+  async debugProblem(
+    id: string,
+    code: string,
+    errorOutput: string,
+  ): Promise<ProblemDebugResponse> {
+    return this.request(`/practice/problems/${id}/debug`, {
+      method: 'POST',
+      body: JSON.stringify({ code, errorOutput }),
+    });
+  }
+
+  async reviewProblem(id: string, code: string): Promise<ProblemReviewResponse> {
+    return this.request(`/practice/problems/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  // --- GitHub Intelligence ---------------------------------------------------
+  async syncGitHub(username: string): Promise<GitHubProfile> {
+    return this.request('/github/sync', {
+      method: 'POST',
+      body: JSON.stringify({ username }),
+    });
+  }
+
+  async getGitHubProfile(): Promise<GitHubProfile | null> {
+    return this.request('/github/profile');
+  }
+
+  // --- Career Analytics ------------------------------------------------------
+  async getUserAnalytics(): Promise<UserAnalyticsSummary> {
+    return this.request('/analytics/user');
+  }
+
+  async getAdminAnalytics(): Promise<AdminAnalyticsSummary> {
+    return this.request('/analytics/admin');
+  }
+
+  // --- Multi-turn Coach Sessions ---------------------------------------------
+  async listCoachSessions(): Promise<CoachSession[]> {
+    return this.request('/coach/sessions');
+  }
+
+  async createCoachSession(title?: string, goalRole?: string): Promise<CoachSession> {
+    return this.request('/coach/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ title, goalRole }),
+    });
+  }
+
+  async sendCoachSessionMessage(
+    sessionId: string,
+    message: string,
+  ): Promise<{ userMessage: CoachMessage; coachMessage: CoachMessage }> {
+    return this.request(`/coach/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  async assessCareerGoal(goalRole: string): Promise<GoalAssessment> {
+    return this.request('/coach/assess-goal', {
+      method: 'POST',
+      body: JSON.stringify({ goalRole }),
+    });
+  }
+
+  // --- RAG Knowledge Base ----------------------------------------------------
+  async ragQuery(query: string, limit = 4): Promise<{ answer: string; chunks: any[] }> {
+    return this.request('/rag/query', {
+      method: 'POST',
+      body: JSON.stringify({ query, limit }),
+    });
   }
 
   // --- Health Checks ---------------------------------------------------------

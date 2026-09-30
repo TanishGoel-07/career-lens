@@ -22,6 +22,8 @@ import { RagModule } from './rag/rag.module';
 import { CoachModule } from './coach/coach.module';
 import { InterviewModule } from './interview/interview.module';
 import { CodeExecutionModule } from './code-execution/code-execution.module';
+import { GitHubModule } from './github/github.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { AdminModule } from './admin/admin.module';
 import { HealthModule } from './health/health.module';
 
@@ -31,9 +33,6 @@ import { HealthModule } from './health/health.module';
     DatabaseModule,
     RedisModule,
 
-    // Rate limiting (architecture §18/§22): a conservative global
-    // default; individual routes (e.g. auth/login) tighten this further
-    // via @Throttle() where brute-force risk is highest.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
 
     BullModule.forRootAsync({
@@ -56,6 +55,8 @@ import { HealthModule } from './health/health.module';
     CoachModule,
     InterviewModule,
     CodeExecutionModule,
+    GitHubModule,
+    AnalyticsModule,
     AdminModule,
     HealthModule,
   ],

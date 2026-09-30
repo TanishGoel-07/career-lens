@@ -15,6 +15,7 @@ describe('SkillGapService', () => {
   };
   let graph: {
     prerequisitesOf: jest.Mock;
+    countDependants: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -27,6 +28,7 @@ describe('SkillGapService', () => {
     };
     graph = {
       prerequisitesOf: jest.fn(),
+      countDependants: jest.fn().mockResolvedValue(1),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -87,6 +89,10 @@ describe('SkillGapService', () => {
       if (skillId === 'sk-graphql') return Promise.resolve(['sk-ts']);
       return Promise.resolve([]);
     });
+    graph.countDependants.mockImplementation((skillId: string) => {
+      if (skillId === 'sk-docker') return Promise.resolve(1);
+      return Promise.resolve(0);
+    });
 
     const gaps = await service.computeForUser('user-1', 'role-1');
 
@@ -95,7 +101,7 @@ describe('SkillGapService', () => {
     const dockerGap = gaps.find((g) => g.skillId === 'sk-docker');
     expect(dockerGap).toBeDefined();
     expect(dockerGap?.prerequisitesMet).toBe(true);
-    expect(dockerGap?.priority).toBe(105); // 100 base + 5 (prereqs met)
+    expect(dockerGap?.priority).toBe(125); // 100 base + 10 (prereqs met) + 15 (unlocks 1 dependant)
 
     const k8sGap = gaps.find((g) => g.skillId === 'sk-k8s');
     expect(k8sGap).toBeDefined();
@@ -105,9 +111,9 @@ describe('SkillGapService', () => {
     const graphqlGap = gaps.find((g) => g.skillId === 'sk-graphql');
     expect(graphqlGap).toBeDefined();
     expect(graphqlGap?.prerequisitesMet).toBe(true); // TypeScript owned
-    expect(graphqlGap?.priority).toBe(15); // 10 base (OPTIONAL) + 5
+    expect(graphqlGap?.priority).toBe(35); // 25 base (OPTIONAL) + 10
 
-    // Result should be sorted by priority descending: Docker (105) -> K8s (100) -> GraphQL (15)
+    // Result should be sorted by priority descending: Docker (125) -> K8s (100) -> GraphQL (35)
     expect(gaps[0].skillId).toBe('sk-docker');
     expect(gaps[1].skillId).toBe('sk-k8s');
     expect(gaps[2].skillId).toBe('sk-graphql');

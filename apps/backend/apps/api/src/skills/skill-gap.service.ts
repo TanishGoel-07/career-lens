@@ -8,21 +8,11 @@ export interface ComputedGap {
   priority: number;
   difficulty: number;
   prerequisitesMet: boolean;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM';
+  estimatedHours: number;
+  downstreamUnlocked: number;
 }
 
-/**
- * Deterministic gap computation (architecture §10):
- *   1. Diff RoleSkill (required for the target role) against UserSkill.
- *   2. For each missing skill, check whether its prerequisites are
- *      already satisfied.
- *   3. Priority = required skills first, then weighted by how many
- *      other required role-skills depend on it (a rough "unlocks the
- *      most things next" heuristic) — no AI judgment involved.
- *
- * `difficulty` is a curated, static per-skill attribute (Skill.category
- * is used as a coarse proxy here; a dedicated difficulty column is a
- * documented follow-up rather than something inferred by AI).
- */
 @Injectable()
 export class SkillGapService {
   constructor(
@@ -42,9 +32,6 @@ export class SkillGapService {
     ]);
 
     const ownedSkillIds = new Set(userSkills.map((s) => s.skillId));
-    const requiredSkillIds = new Set(
-      roleSkills.filter((rs) => rs.importance === SkillImportance.REQUIRED).map((rs) => rs.skillId),
-    );
 
     const missing = roleSkills.filter((rs) => !ownedSkillIds.has(rs.skillId));
 
@@ -53,14 +40,22 @@ export class SkillGapService {
       const prerequisites = await this.graph.prerequisitesOf(rs.skillId);
       const prerequisitesMet = prerequisites.every((p) => ownedSkillIds.has(p));
 
-      // "Unlocks the most things next" weighting is a documented v1
-      // placeholder (kept at 0, not fabricated) until a real
-      // downstream-dependency count query is added.
-      const unlocksCount = 0;
+      // Calculate real downstream unlock impact
+      const downstreamCount = await this.graph.countDependants(rs.skillId);
+      const unlocksCount = downstreamCount * 15;
 
-      const basePriority = rs.importance === SkillImportance.REQUIRED ? 100 : 10;
-      const priority = basePriority + (prerequisitesMet ? 5 : 0) + unlocksCount;
-      const difficulty = prerequisites.length + 1; // more unmet prerequisites -> harder, deterministic proxy
+      const basePriority = rs.importance === SkillImportance.REQUIRED ? 100 : 25;
+      const priority = basePriority + (prerequisitesMet ? 10 : 0) + unlocksCount;
+      const difficulty = Math.min(5, prerequisites.length + 1);
+
+      const severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' =
+        rs.importance === SkillImportance.REQUIRED && downstreamCount > 0
+          ? 'CRITICAL'
+          : rs.importance === SkillImportance.REQUIRED
+          ? 'HIGH'
+          : 'MEDIUM';
+
+      const estimatedHours = difficulty * 8; // ~8 hours per difficulty tier
 
       results.push({
         skillId: rs.skillId,
@@ -68,6 +63,9 @@ export class SkillGapService {
         priority,
         difficulty,
         prerequisitesMet,
+        severity,
+        estimatedHours,
+        downstreamUnlocked: downstreamCount,
       });
     }
 

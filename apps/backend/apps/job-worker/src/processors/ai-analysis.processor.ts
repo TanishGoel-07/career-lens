@@ -23,7 +23,66 @@ export class AiAnalysisProcessor extends WorkerHost {
     super();
   }
 
-  private async callAiForFeedback(deterministicBreakdown: unknown): Promise<{
+  private generateDynamicFeedback(
+    extractedSkills: string[],
+    weakBullets: Array<{ text: string; reason: string; rewrite: string }>,
+    missingSkills: string[],
+    deterministicBreakdown: any,
+  ): { strengths: string[]; weaknesses: string[]; suggestions: string[] } {
+    const strengths: string[] = [];
+    if (extractedSkills.length >= 5) {
+      strengths.push(
+        `Verified proficiencies in ${extractedSkills.slice(0, 4).join(', ')} provide strong alignment with modern engineering stacks.`,
+      );
+    } else if (extractedSkills.length > 0) {
+      strengths.push(`Identified core foundational skills in ${extractedSkills.join(', ')}.`);
+    } else {
+      strengths.push('Clean layout structure with parseable sections.');
+    }
+
+    if (deterministicBreakdown?.impactScore >= 60) {
+      strengths.push('Demonstrates solid quantifiable business impact across several key achievements.');
+    } else {
+      strengths.push('Clear presentation of roles, educational milestones, and responsibilities.');
+    }
+
+    const weaknesses: string[] = [];
+    if (weakBullets && weakBullets.length > 0) {
+      weaknesses.push(
+        `Identified ${weakBullets.length} bullet point(s) lacking quantifiable metrics (%, $, latency, or scale) or using passive voice.`,
+      );
+      weaknesses.push(
+        `Specific bullet needs rework: "${weakBullets[0].text.slice(0, 80)}..." — ${weakBullets[0].reason}`,
+      );
+    } else {
+      weaknesses.push('Could incorporate higher density of senior architectural keywords.');
+    }
+
+    const suggestions: string[] = [];
+    if (weakBullets && weakBullets.length > 0) {
+      suggestions.push(
+        `Apply the Google XYZ formula: replace weak bullet with: "${weakBullets[0].rewrite.slice(0, 120)}"`,
+      );
+    }
+    if (missingSkills && missingSkills.length > 0) {
+      suggestions.push(
+        `Add concrete proof-of-work project bullets showcasing ${missingSkills.slice(0, 3).join(', ')}.`,
+      );
+    }
+    suggestions.push(
+      'Organize technical proficiencies into distinct categories: Languages, Cloud/DevOps, Databases, and System Design.',
+    );
+
+    return { strengths, weaknesses, suggestions };
+  }
+
+  private async callAiForFeedback(
+    resumeText: string,
+    extractedSkills: string[],
+    weakBullets: any[],
+    missingSkills: any[],
+    deterministicBreakdown: any,
+  ): Promise<{
     strengths: string[];
     weaknesses: string[];
     suggestions: string[];
@@ -31,36 +90,29 @@ export class AiAnalysisProcessor extends WorkerHost {
     const provider = process.env.AI_PROVIDER || 'mock';
 
     if (provider === 'mock') {
-      return {
-        strengths: [
-          'Strong presentation of practical technical experience and project outcomes.',
-          'Clear progression in responsibilities and technical breadth.',
-          'Consistent use of action verbs and ATS-friendly typography.',
-        ],
-        weaknesses: [
-          'Some bullet points would benefit from more quantified business metrics.',
-          'Summary could be more tailored towards target architectural roles.',
-        ],
-        suggestions: [
-          'Include quantifiable impact (e.g., latency reductions, cost savings, user scale).',
-          'Highlight system design and cloud architecture projects prominently.',
-          'Group core proficiencies into clear categories (Languages, Frameworks, Cloud, Databases).',
-        ],
-      };
+      return this.generateDynamicFeedback(extractedSkills, weakBullets, missingSkills, deterministicBreakdown);
     }
 
     const systemPrompt = [
-      'You are part of CareerLens AI\'s resume-feedback feature (prompt: resume-feedback.v1).',
-      'You are given deterministic analysis of a resume. Respond with ONLY a JSON object:',
+      'You are a Principal Career Architect and Executive ATS Specialist for CareerLens AI.',
+      'Analyze the candidate\'s real resume text and weaknesses. Respond with ONLY valid JSON:',
       '{ "strengths": string[], "weaknesses": string[], "suggestions": string[] }.',
-      'Never claim this is an official ATS score.',
+      'Ground every single point in the provided resume text. Never hallucinate facts.',
     ].join(' ');
+
+    const userPrompt = JSON.stringify({
+      resumeExcerpt: resumeText.slice(0, 3000),
+      detectedSkills: extractedSkills,
+      flaggedWeakBullets: (weakBullets || []).slice(0, 3),
+      missingTargetSkills: (missingSkills || []).slice(0, 4),
+      scores: deterministicBreakdown,
+    });
 
     if (provider === 'gemini') {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        this.logger.warn('GEMINI_API_KEY not set — falling back to deterministic mock feedback');
-        return this.callAiForFeedback(deterministicBreakdown);
+        this.logger.warn('GEMINI_API_KEY not set — using dynamic rule-based feedback generator');
+        return this.generateDynamicFeedback(extractedSkills, weakBullets, missingSkills, deterministicBreakdown);
       }
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
@@ -68,7 +120,7 @@ export class AiAnalysisProcessor extends WorkerHost {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: JSON.stringify(deterministicBreakdown) }] }],
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
           generationConfig: { maxOutputTokens: 800, responseMimeType: 'application/json' },
         }),
       });
@@ -85,12 +137,8 @@ export class AiAnalysisProcessor extends WorkerHost {
     // Default to OpenAI
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      this.logger.warn('OPENAI_API_KEY not set — falling back to deterministic mock feedback');
-      return {
-        strengths: ['Clear experience progression', 'Good use of measurable outcomes', 'Relevant technical skills'],
-        weaknesses: ['Summary could be more role-specific', 'Two bullets are longer than recommended'],
-        suggestions: ['Tailor your summary to the target role', 'Add one project that demonstrates system design'],
-      };
+      this.logger.warn('OPENAI_API_KEY not set — using dynamic rule-based feedback generator');
+      return this.generateDynamicFeedback(extractedSkills, weakBullets, missingSkills, deterministicBreakdown);
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -100,10 +148,10 @@ export class AiAnalysisProcessor extends WorkerHost {
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: JSON.stringify(deterministicBreakdown) },
+          { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
-        max_tokens: 600,
+        max_tokens: 700,
       }),
     });
     if (!response.ok) throw new Error(`OpenAI request failed: ${response.status}`);
@@ -118,17 +166,32 @@ export class AiAnalysisProcessor extends WorkerHost {
 
   async process(job: Job<{ resumeId: string }>): Promise<void> {
     const { resumeId } = job.data;
-    const evaluation = await this.prisma.resumeEvaluation.findFirst({
-      where: { resumeId },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!evaluation) {
-      this.logger.warn(`No deterministic evaluation yet for resume ${resumeId} — skipping AI pass.`);
+    const [resume, evaluation] = await Promise.all([
+      this.prisma.resume.findUnique({ where: { id: resumeId } }),
+      this.prisma.resumeEvaluation.findFirst({
+        where: { resumeId },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    if (!resume || !evaluation) {
+      this.logger.warn(`Resume or evaluation ${resumeId} not found — skipping AI pass.`);
       return;
     }
 
     try {
-      const aiFeedback = await this.callAiForFeedback(evaluation.deterministicScoreBreakdown);
+      const extractedSkills = (resume.extractedSkills as string[]) || [];
+      const weakBullets = (evaluation.weakBullets as any[]) || [];
+      const missingSkills = (evaluation.missingSkills as string[]) || [];
+
+      const aiFeedback = await this.callAiForFeedback(
+        resume.parsedText || '',
+        extractedSkills,
+        weakBullets,
+        missingSkills,
+        evaluation.deterministicScoreBreakdown,
+      );
+
       if (aiFeedback) {
         await this.prisma.resumeEvaluation.update({
           where: { id: evaluation.id },
@@ -136,10 +199,6 @@ export class AiAnalysisProcessor extends WorkerHost {
         });
       }
     } catch (err) {
-      // AI feedback is an enhancement, not a requirement — the
-      // deterministic score already stands on its own, so a failure
-      // here is logged and swallowed rather than failing the job
-      // (and therefore never blocks the user from seeing their score).
       this.logger.warn(`AI feedback generation failed for resume ${resumeId}: ${(err as Error).message}`);
     }
   }

@@ -4,6 +4,7 @@ import { IsArray, IsIn, IsInt, IsOptional, IsString, Min, ValidateNested } from 
 import { Type } from 'class-transformer';
 import { PrismaService, SkillSource, SkillImportance } from '@career-lens/db';
 import { SkillGapService } from './skill-gap.service';
+import { SkillGraphService } from './skill-graph.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthenticatedUser } from '../common/decorators/current-user.decorator';
 
@@ -77,7 +78,13 @@ export class SkillsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gapService: SkillGapService,
+    private readonly graphService: SkillGraphService,
   ) {}
+
+  @Get('skills/graph')
+  getGraph(@CurrentUser() user: AuthenticatedUser) {
+    return this.graphService.getGraphVisualization(user.id);
+  }
 
   @Post('skills/mine')
   async addUserSkill(@CurrentUser() user: AuthenticatedUser, @Body() dto: AddUserSkillDto): Promise<any> {

@@ -80,11 +80,11 @@ describe('RoadmapService', () => {
       expect(prisma.roadmapModule.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.arrayContaining([
-            expect.objectContaining({ title: 'Learn: Docker', orderIndex: 0 }),
-            expect.objectContaining({ title: 'Practice: Docker', orderIndex: 1 }),
-            expect.objectContaining({ title: 'Learn: Kubernetes' }),
-            expect.objectContaining({ title: 'Practice: Kubernetes' }),
-            expect.objectContaining({ title: expect.stringContaining('Capstone project') }),
+            expect.objectContaining({ title: expect.stringContaining('Docker'), orderIndex: 0 }),
+            expect.objectContaining({ title: expect.stringContaining('Docker'), orderIndex: 1 }),
+            expect.objectContaining({ title: expect.stringContaining('Kubernetes') }),
+            expect.objectContaining({ title: expect.stringContaining('Kubernetes') }),
+            expect.objectContaining({ title: expect.stringContaining('Capstone') }),
           ]),
         }),
       );

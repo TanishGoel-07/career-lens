@@ -1,11 +1,23 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '@career-lens/db';
 
-/**
- * Owns the SkillDependency DAG: cycle-safe writes + traversal helpers
- * used by the gap engine and the roadmap engine. Pure deterministic
- * graph logic — no AI involved anywhere in this file (architecture §10).
- */
+export interface SkillGraphNode {
+  id: string;
+  name: string;
+  category: string | null;
+  acquired?: boolean;
+}
+
+export interface SkillGraphEdge {
+  fromSkillId: string;
+  toSkillId: string;
+}
+
+export interface SkillGraphPayload {
+  nodes: SkillGraphNode[];
+  edges: SkillGraphEdge[];
+}
+
 @Injectable()
 export class SkillGraphService {
   constructor(private readonly prisma: PrismaService) {}
@@ -72,6 +84,53 @@ export class SkillGraphService {
       }
     };
     await visit(skillId);
-    return ordered; // topologically ordered: prerequisites before dependants
+    return ordered;
+  }
+
+  /** Count how many other skills have this skill as a direct or transitive prerequisite. */
+  async countDependants(skillId: string): Promise<number> {
+    const visited = new Set<string>();
+    let frontier = [skillId];
+
+    while (frontier.length > 0) {
+      const edges = await this.prisma.skillDependency.findMany({
+        where: { prerequisiteSkillId: { in: frontier } },
+        select: { skillId: true },
+      });
+      const next: string[] = [];
+      for (const edge of edges) {
+        if (!visited.has(edge.skillId)) {
+          visited.add(edge.skillId);
+          next.push(edge.skillId);
+        }
+      }
+      frontier = next;
+    }
+    return visited.size;
+  }
+
+  /** Returns full nodes and edges of the skill DAG for interactive visualization. */
+  async getGraphVisualization(userId?: string): Promise<SkillGraphPayload> {
+    const [allSkills, allEdges, userSkills] = await Promise.all([
+      this.prisma.skill.findMany(),
+      this.prisma.skillDependency.findMany(),
+      userId ? this.prisma.userSkill.findMany({ where: { userId } }) : Promise.resolve([]),
+    ]);
+
+    const ownedSet = new Set(userSkills.map((us) => us.skillId));
+
+    const nodes: SkillGraphNode[] = allSkills.map((s) => ({
+      id: s.id,
+      name: s.name,
+      category: s.category,
+      acquired: ownedSet.has(s.id),
+    }));
+
+    const edges: SkillGraphEdge[] = allEdges.map((e) => ({
+      fromSkillId: e.prerequisiteSkillId,
+      toSkillId: e.skillId,
+    }));
+
+    return { nodes, edges };
   }
 }

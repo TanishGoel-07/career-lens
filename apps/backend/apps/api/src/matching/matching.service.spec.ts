@@ -9,6 +9,7 @@ describe('MatchingService', () => {
   let prisma: {
     resume: { findFirst: jest.Mock };
     job: { findUnique: jest.Mock };
+    profile: { findUnique: jest.Mock };
     jobMatch: { upsert: jest.Mock };
     $queryRaw: jest.Mock;
   };
@@ -18,6 +19,7 @@ describe('MatchingService', () => {
     prisma = {
       resume: { findFirst: jest.fn() },
       job: { findUnique: jest.fn() },
+      profile: { findUnique: jest.fn().mockResolvedValue({ experienceYears: 3 }) },
       jobMatch: { upsert: jest.fn() },
       $queryRaw: jest.fn(),
     };
@@ -84,7 +86,7 @@ describe('MatchingService', () => {
     expect(result.explanation).toContain('Candidate has strong foundational backend skills');
     expect(prisma.jobMatch.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({ scoringVersion: 'match-v1' }),
+        create: expect.objectContaining({ scoringVersion: 'match-v2-semantic' }),
       }),
     );
   });
