@@ -7,6 +7,8 @@
     "build": "tsc",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
+    "push": "prisma db push",
+    "studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {

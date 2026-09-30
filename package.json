@@ -12,10 +12,10 @@
     "build": "pnpm build:backend && pnpm build:frontend",
     "test:backend": "pnpm --filter @career-lens/api test",
     "test": "pnpm test:backend",
-    "db:generate": "pnpm --filter @career-lens/db exec prisma generate",
-    "db:migrate": "pnpm --filter @career-lens/db exec prisma migrate dev",
-    "db:push": "pnpm --filter @career-lens/db exec prisma db push",
-    "db:seed": "pnpm --filter @career-lens/db exec ts-node prisma/seed.ts",
+    "db:generate": "pnpm --filter @career-lens/db generate",
+    "db:migrate": "pnpm --filter @career-lens/db migrate",
+    "db:push": "pnpm --filter @career-lens/db push",
+    "db:seed": "pnpm --filter @career-lens/db seed",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   }
