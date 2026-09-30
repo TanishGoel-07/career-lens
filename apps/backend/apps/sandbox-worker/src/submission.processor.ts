@@ -41,7 +41,7 @@ export class SubmissionProcessor extends WorkerHost {
         expectedOutput: tc.expectedOutput,
       }));
     } else if (submission.interviewQuestion?.testCases) {
-      testCases = (submission.interviewQuestion.testCases as TestCase[]) || [];
+      testCases = (submission.interviewQuestion.testCases as unknown as TestCase[]) || [];
     }
 
     const config = LANGUAGE_CONFIGS[submission.language];
