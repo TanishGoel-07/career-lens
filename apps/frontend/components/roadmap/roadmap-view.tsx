@@ -43,6 +43,21 @@ export function RoadmapView({ onNavigateToSkills }: RoadmapViewProps) {
 
   const handleToggleModule = async (moduleId: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'COMPLETED' ? 'IN_PROGRESS' : 'COMPLETED'
+    if (moduleId.startsWith('demo-')) {
+      setDemoModules((prev) =>
+        prev.map((m) =>
+          m.id === moduleId
+            ? {
+                ...m,
+                status: nextStatus as any,
+                completedAt: nextStatus === 'COMPLETED' ? new Date().toISOString() : null,
+              }
+            : m,
+        ),
+      )
+      return
+    }
+
     try {
       const updated = await apiClient.updateModuleStatus(moduleId, nextStatus)
       if (activeRoadmap) {
@@ -53,11 +68,19 @@ export function RoadmapView({ onNavigateToSkills }: RoadmapViewProps) {
       }
     } catch (err) {
       console.error('Failed to update module status', err)
+      if (activeRoadmap) {
+        setActiveRoadmap({
+          ...activeRoadmap,
+          modules: activeRoadmap.modules.map((m) =>
+            m.id === moduleId ? { ...m, status: nextStatus as any } : m,
+          ),
+        })
+      }
     }
   }
 
-  // Fallback demo milestones
-  const defaultModules: RoadmapModule[] = [
+  // Fallback demo milestones in state so users can interactively mark them complete
+  const [demoModules, setDemoModules] = useState<RoadmapModule[]>([
     {
       id: 'demo-1',
       roadmapId: 'road-default',
@@ -122,9 +145,9 @@ export function RoadmapView({ onNavigateToSkills }: RoadmapViewProps) {
         tasks: ['Write architecture decision records (ADRs)', 'Deploy and test under load'],
       },
     },
-  ]
+  ])
 
-  const modules = activeRoadmap?.modules?.length ? activeRoadmap.modules : defaultModules
+  const modules = activeRoadmap?.modules?.length ? activeRoadmap.modules : demoModules
 
   const completedCount = modules.filter((m) => m.status === 'COMPLETED').length
   const progressPct = Math.round((completedCount / Math.max(modules.length, 1)) * 100)

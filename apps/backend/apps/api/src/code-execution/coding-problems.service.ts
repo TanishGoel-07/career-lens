@@ -507,54 +507,97 @@ export class CodingProblemsService implements OnModuleInit {
     }
   }
 
-  async listProblems(userId?: string, category?: string, difficulty?: string): Promise<CodingProblemDto[]> {
+  async getFallbackUserId(): Promise<string> {
+    const firstUser = await this.prisma.user.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (firstUser) return firstUser.id;
+    const guest = await this.prisma.user.upsert({
+      where: { email: 'guest@careerlens.ai' },
+      update: {},
+      create: {
+        email: 'guest@careerlens.ai',
+        passwordHash: 'guest-unauthenticated-hash',
+        role: 'USER',
+      },
+    });
+    return guest.id;
+  }
+
+  async listProblems(userId?: string, category?: string, difficulty?: string): Promise<any[]> {
     const where: any = {};
     if (category) where.category = category;
     if (difficulty) where.difficulty = difficulty;
 
-    const [problems, userSubmissions] = await Promise.all([
-      this.prisma.codingProblem.findMany({
+    let problems = await this.prisma.codingProblem.findMany({
+      where,
+      include: {
+        testCases: { where: { isHidden: false }, orderBy: { orderIndex: 'asc' } },
+      },
+      orderBy: { orderIndex: 'asc' },
+    });
+
+    if (problems.length === 0) {
+      await this.seedProblems();
+      problems = await this.prisma.codingProblem.findMany({
         where,
         include: {
           testCases: { where: { isHidden: false }, orderBy: { orderIndex: 'asc' } },
         },
         orderBy: { orderIndex: 'asc' },
-      }),
-      userId
-        ? this.prisma.codeSubmission.findMany({
-            where: { userId, status: 'COMPLETED' },
-            select: { problemId: true },
-          })
-        : Promise.resolve([]),
-    ]);
+      });
+    }
+
+    const userSubmissions = userId
+      ? await this.prisma.codeSubmission.findMany({
+          where: { userId, status: 'COMPLETED' },
+          select: { problemId: true },
+        })
+      : [];
 
     const solvedProblemIds = new Set(userSubmissions.map((s) => s.problemId).filter(Boolean));
 
-    return problems.map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      title: p.title,
-      description: p.description,
-      difficulty: p.difficulty,
-      category: p.category,
-      tags: p.tags as string[],
-      starterCodes: p.starterCodes as Record<string, string>,
-      constraints: p.constraints as string[],
-      hints: p.hints as string[],
-      publicTestCases: p.testCases.map((tc) => ({ input: tc.input, expectedOutput: tc.expectedOutput })),
-      isSolved: solvedProblemIds.has(p.id),
-    }));
+    return problems.map((p) => {
+      const rawStarters = (p.starterCodes as Record<string, string>) || {};
+      const starterCode = {
+        python: rawStarters['PYTHON'] || rawStarters['python'] || '',
+        cpp: rawStarters['CPP'] || rawStarters['cpp'] || '',
+        java: rawStarters['JAVA'] || rawStarters['java'] || '',
+      };
+      const testCases = p.testCases.map((tc) => ({
+        input: tc.input,
+        expectedOutput: tc.expectedOutput,
+        isHidden: tc.isHidden,
+      }));
+
+      return {
+        id: p.id,
+        slug: p.slug,
+        title: p.title,
+        description: p.description,
+        difficulty: p.difficulty,
+        category: p.category,
+        tags: p.tags as string[],
+        starterCodes: rawStarters,
+        starterCode,
+        constraints: p.constraints as string[],
+        hints: p.hints as string[],
+        testCases,
+        publicTestCases: p.testCases.map((tc) => ({ input: tc.input, expectedOutput: tc.expectedOutput })),
+        isSolved: solvedProblemIds.has(p.id),
+      };
+    });
   }
 
-  async getProblemBySlug(slug: string, userId?: string): Promise<CodingProblemDto> {
-    const problem = await this.prisma.codingProblem.findUnique({
-      where: { slug },
+  async getProblemBySlug(slugOrId: string, userId?: string): Promise<any> {
+    const problem = await this.prisma.codingProblem.findFirst({
+      where: {
+        OR: [{ slug: slugOrId }, { id: slugOrId }],
+      },
       include: {
         testCases: { where: { isHidden: false }, orderBy: { orderIndex: 'asc' } },
       },
     });
 
-    if (!problem) throw new NotFoundException(`Problem ${slug} not found.`);
+    if (!problem) throw new NotFoundException(`Problem ${slugOrId} not found.`);
 
     let isSolved = false;
     if (userId) {
@@ -564,6 +607,18 @@ export class CodingProblemsService implements OnModuleInit {
       isSolved = Boolean(solved);
     }
 
+    const rawStarters = (problem.starterCodes as Record<string, string>) || {};
+    const starterCode = {
+      python: rawStarters['PYTHON'] || rawStarters['python'] || '',
+      cpp: rawStarters['CPP'] || rawStarters['cpp'] || '',
+      java: rawStarters['JAVA'] || rawStarters['java'] || '',
+    };
+    const testCases = problem.testCases.map((tc) => ({
+      input: tc.input,
+      expectedOutput: tc.expectedOutput,
+      isHidden: tc.isHidden,
+    }));
+
     return {
       id: problem.id,
       slug: problem.slug,
@@ -572,22 +627,30 @@ export class CodingProblemsService implements OnModuleInit {
       difficulty: problem.difficulty,
       category: problem.category,
       tags: problem.tags as string[],
-      starterCodes: problem.starterCodes as Record<string, string>,
+      starterCodes: rawStarters,
+      starterCode,
       constraints: problem.constraints as string[],
       hints: problem.hints as string[],
+      testCases,
       publicTestCases: problem.testCases.map((tc) => ({ input: tc.input, expectedOutput: tc.expectedOutput })),
       isSolved,
     };
   }
 
-  async getHint(problemId: string, level: number): Promise<{ level: number; hint: string }> {
-    const problem = await this.prisma.codingProblem.findUnique({ where: { id: problemId } });
+  async getHint(problemIdOrSlug: string, level: number): Promise<any> {
+    const problem = await this.prisma.codingProblem.findFirst({
+      where: {
+        OR: [{ id: problemIdOrSlug }, { slug: problemIdOrSlug }],
+      },
+    });
     if (!problem) throw new NotFoundException('Problem not found.');
 
     const hints = (problem.hints as string[]) || [];
     const index = Math.max(0, Math.min(hints.length - 1, level - 1));
     return {
       level: index + 1,
+      hintIndex: index + 1,
+      totalHints: hints.length || 3,
       hint: hints[index] || 'Consider the optimal data structure for instant element lookups.',
     };
   }

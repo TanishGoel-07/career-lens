@@ -48,9 +48,7 @@ export function ResumeView({ onAuth }: ResumeViewProps) {
           if (resumes.length > 0) {
             const latest = resumes[0]
             setActiveResume(latest)
-            if (latest.status === 'COMPLETED') {
-              apiClient.getResumeEvaluation(latest.id).then(setEvaluation).catch(() => {})
-            }
+            apiClient.getResumeEvaluation(latest.id).then(setEvaluation).catch(() => {})
           }
         })
         .catch(() => {})
@@ -526,10 +524,8 @@ export function ResumeView({ onAuth }: ResumeViewProps) {
                 key={r.id}
                 onClick={async () => {
                   setActiveResume(r)
-                  if (r.status === 'COMPLETED') {
-                    const evalRes = await apiClient.getResumeEvaluation(r.id).catch(() => null)
-                    if (evalRes) setEvaluation(evalRes)
-                  }
+                  const evalRes = await apiClient.getResumeEvaluation(r.id).catch(() => null)
+                  if (evalRes) setEvaluation(evalRes)
                 }}
                 className={cn(
                   'flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-colors',

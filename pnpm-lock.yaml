@@ -61,12 +61,18 @@ importers:
       ioredis:
         specifier: ^5.4.1
         version: 5.11.1
+      mammoth:
+        specifier: ^1.7.0
+        version: 1.13.0
       passport:
         specifier: ^0.7.0
         version: 0.7.0
       passport-jwt:
         specifier: ^4.0.1
         version: 4.0.1
+      pdf-parse:
+        specifier: ^1.1.1
+        version: 1.1.4
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
